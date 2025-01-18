@@ -2,12 +2,9 @@ export default {
   title: '支持多层嵌套，列数据中有 children 字段即可。（建议不超过10层）',
   body: {
     type: 'crud',
-    api: '/api/mock2/crud/table2',
+    api: '/api/mock2/crud/table6',
+    deferApi: '/api/mock2/crud/table6?parentId=${id}',
     saveOrderApi: '/api/mock2/form/saveData',
-    expandConfig: {
-      expand: 'first',
-      accordion: true
-    },
     draggable: true,
     columns: [
       {
@@ -16,7 +13,7 @@ export default {
         sortable: true,
         type: 'text',
         toggled: true,
-        width: 100
+        width: 150
       },
       {
         name: 'engine',
@@ -116,8 +113,7 @@ export default {
                   },
                   {
                     type: 'html',
-                    html:
-                      '<p>添加其他 <span>Html 片段</span> 需要支持变量替换（todo）.</p>'
+                    html: '<p>添加其他 <span>Html 片段</span> 需要支持变量替换（todo）.</p>'
                   }
                 ]
               }

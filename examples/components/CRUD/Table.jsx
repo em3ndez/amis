@@ -68,6 +68,9 @@ export default {
     keepItemSelectionOnPageChange: true,
     maxKeepItemSelectionLength: 11,
     labelTpl: '${id} ${engine}',
+    orderBy: 'id',
+    orderDir: 'asc',
+    // affixHeader: false,
     filter: {
       title: '条件搜索',
       submitText: '',
@@ -155,7 +158,6 @@ export default {
       {
         name: 'id',
         label: 'ID',
-        width: 20,
         sortable: true,
         type: 'text',
         toggled: true,
@@ -212,7 +214,8 @@ export default {
               value: '6'
             }
           ]
-        }
+        },
+        classNameExpr: "<%= data.version < 5 ? 'bg-danger' : '' %>"
       },
       {
         type: 'text',
@@ -282,8 +285,7 @@ export default {
                   },
                   {
                     type: 'html',
-                    html:
-                      '<p>添加其他 <span>Html 片段</span> 需要支持变量替换（todo）.</p>'
+                    html: '<p>添加其他 <span>Html 片段</span> 需要支持变量替换（todo）.</p>'
                   }
                 ]
               }
@@ -301,7 +303,16 @@ export default {
               body: {
                 type: 'form',
                 name: 'sample-edit-form',
-                api: '/api/sample/$id',
+                data:{
+                  env: 'test'
+                },
+                api: {
+                  method:'post',
+                  url:'/api/sample/$id',
+                  messages:{
+                    success: '成功了-${env}'
+                  }
+                },
                 body: [
                   {
                     type: 'input-text',

@@ -1,14 +1,15 @@
 import React from 'react';
-import {toast} from '../../src/components/Toast';
-import {render, makeTranslator} from '../../src/index';
-import {normalizeLink} from '../../src/utils/normalizeLink';
-import {isMobile} from '../../src/utils/helper';
-import attachmentAdpator from '../../src/utils/attachmentAdpator';
-import {alert, confirm} from '../../src/components/Alert';
+import {toast, render, makeTranslator} from 'amis';
+import {normalizeLink} from 'amis-core';
+import {isMobile} from 'amis-core';
+import {attachmentAdpator} from 'amis-core';
+import {alert, confirm} from 'amis-ui';
 import axios from 'axios';
 import JSON5 from 'json5';
-import CodeEditor from '../../src/components/Editor';
+import {Editor as CodeEditor} from 'amis-ui';
 import copy from 'copy-to-clipboard';
+import {matchPath} from 'react-router-dom';
+import {Drawer} from 'amis-ui';
 
 const DEFAULT_CONTENT = `{
     "$schema": "/schemas/page.json#",
@@ -35,7 +36,7 @@ const scopes = {
             "autoFocus": false,
             "api": "/api/mock/saveForm?waitSeconds=1",
             "mode": "horizontal",
-            "controls": SCHEMA_PLACEHOLDER,
+            "body": SCHEMA_PLACEHOLDER,
             "submitText": null,
             "actions": []
         }
@@ -62,7 +63,7 @@ const scopes = {
             "type": "form",
             "mode": "horizontal",
             "autoFocus": false,
-            "controls": [
+            "body": [
                 SCHEMA_PLACEHOLDER
             ],
             "submitText": null,
@@ -100,13 +101,14 @@ export default class PlayGround extends React.Component {
   constructor(props) {
     super(props);
     this.iframeRef = React.createRef();
-    const {router} = props;
+    const {history} = props;
 
     const schema = this.buildSchema(props.code || DEFAULT_CONTENT, props);
     this.state = {
       asideWidth: props.asideWidth || Math.max(300, window.innerWidth * 0.3),
       schema: schema,
-      schemaCode: JSON.stringify(schema, null, 2)
+      schemaCode: JSON.stringify(schema, null, 2),
+      isOpened: false
     };
 
     this.handleMouseDown = this.handleMouseDown.bind(this);
@@ -114,6 +116,8 @@ export default class PlayGround extends React.Component {
     this.handleMouseUp = this.handleMouseUp.bind(this);
     this.removeWindowEvents = this.removeWindowEvents.bind(this);
     this.handleChange = this.handleChange.bind(this);
+    this.toggleDrawer = this.toggleDrawer.bind(this);
+    this.close = this.close.bind(this);
     this.schemaProps = {};
 
     const __ = makeTranslator(props.locale);
@@ -121,11 +125,17 @@ export default class PlayGround extends React.Component {
     this.env = {
       session: 'doc',
       updateLocation: (location, replace) => {
-        router[replace ? 'replace' : 'push'](normalizeLink(location));
+        history[replace ? 'replace' : 'push'](normalizeLink(location));
       },
       isCurrentUrl: to => {
+        if (!to) {
+          return false;
+        }
         const link = normalizeLink(to);
-        return router.isActive(link);
+        return !!matchPath(history.location.pathname, {
+          path: link,
+          exact: true
+        });
       },
       jumpTo: (to, action) => {
         to = normalizeLink(to);
@@ -143,14 +153,22 @@ export default class PlayGround extends React.Component {
         if (/^https?:\/\//.test(to)) {
           window.location.replace(to);
         } else {
-          router.push(to);
+          history.push(to);
         }
       },
       fetcher: async api => {
         let {url, method, data, responseType, config, headers} = api;
         config = config || {};
+        // 如果在 gh-pages 里面
+        if (
+          /^\/amis/.test(window.location.pathname) &&
+          typeof url === 'string' &&
+          url.startsWith('/examples/static/')
+        ) {
+          url = url.replace('/examples/static/', '/amis/static/');
+        }
+
         config.url = url;
-        config.withCredentials = true;
         responseType && (config.responseType = responseType);
 
         if (config.cancelExecutor) {
@@ -181,7 +199,7 @@ export default class PlayGround extends React.Component {
         };
 
         let response = await axios(config);
-        response = await attachmentAdpator(response, __);
+        response = await attachmentAdpator(response, __, api);
 
         if (response.status >= 400) {
           if (response.data) {
@@ -229,6 +247,73 @@ export default class PlayGround extends React.Component {
       },
       replaceText: {
         AMIS_HOST: 'https://baidu.gitee.io/amis'
+      },
+      loadTinymcePlugin: async tinymce => {
+        // 参考：https://www.tiny.cloud/docs/advanced/creating-a-plugin/
+        /*
+          Note: We have included the plugin in the same JavaScript file as the TinyMCE
+          instance for display purposes only. Tiny recommends not maintaining the plugin
+          with the TinyMCE instance and using the `external_plugins` option.
+        */
+        tinymce.PluginManager.add('example', function (editor, url) {
+          var openDialog = function () {
+            return editor.windowManager.open({
+              title: 'Example plugin',
+              body: {
+                type: 'panel',
+                items: [
+                  {
+                    type: 'input',
+                    name: 'title',
+                    label: 'Title'
+                  }
+                ]
+              },
+              buttons: [
+                {
+                  type: 'cancel',
+                  text: 'Close'
+                },
+                {
+                  type: 'submit',
+                  text: 'Save',
+                  primary: true
+                }
+              ],
+              onSubmit: function (api) {
+                var data = api.getData();
+                /* Insert content when the window form is submitted */
+                editor.insertContent('Title: ' + data.title);
+                api.close();
+              }
+            });
+          };
+          /* Add a button that opens a window */
+          editor.ui.registry.addButton('example', {
+            text: 'My button',
+            onAction: function () {
+              /* Open window */
+              openDialog();
+            }
+          });
+          /* Adds a menu item, which can then be included in any menu via the menu/menubar configuration */
+          editor.ui.registry.addMenuItem('example', {
+            text: 'Example plugin',
+            onAction: function () {
+              /* Open window */
+              openDialog();
+            }
+          });
+          /* Return the metadata for the help plugin */
+          return {
+            getMetadata: function () {
+              return {
+                name: 'Example plugin',
+                url: 'http://exampleplugindocsurl.com'
+              };
+            }
+          };
+        });
       }
     };
 
@@ -280,7 +365,7 @@ export default class PlayGround extends React.Component {
     const query = props.location.query;
 
     try {
-      const scope = query.scope || props.scope;
+      const scope = props.scope;
 
       if (scope && scopes[scope]) {
         schemaContent = scopes[scope].replace(
@@ -390,6 +475,18 @@ export default class PlayGround extends React.Component {
     window.removeEventListener('mousemove', this.handleMouseMove);
   }
 
+  toggleDrawer() {
+    this.setState({
+      isOpened: !this.state.isOpened
+    });
+  }
+
+  close() {
+    this.setState({
+      isOpened: false
+    });
+  }
+
   editorDidMount = (editor, monaco) => {
     this.editor = editor;
     this.monaco = monaco;
@@ -456,8 +553,36 @@ export default class PlayGround extends React.Component {
   }
 
   render() {
-    const {vertical, height} = this.props;
-    if (vertical) {
+    const {vertical, mini, height, theme, classPrefix} = this.props;
+    if (mini) {
+      return (
+        <div className="Playgroud Playgroud--mini">
+          <a onClick={this.toggleDrawer} className="Playgroud-edit-btn">
+            编辑代码 <i className="fa fa-code p-l-xs"></i>
+          </a>
+          <Drawer
+            showCloseButton
+            closeOnOutside
+            resizable
+            theme={theme}
+            overlay={false}
+            position="right"
+            show={this.state.isOpened}
+            onHide={this.close}
+          >
+            <div className={`${classPrefix}Drawer-header`}>
+              编辑代码（支持编辑实时预览）
+            </div>
+            <div className={`${classPrefix}Drawer-body no-padder`}>
+              {this.renderEditor()}
+            </div>
+          </Drawer>
+          <div style={{minHeight: height}} className="Playgroud-preview">
+            {this.renderPreview()}
+          </div>
+        </div>
+      );
+    } else if (vertical) {
       return (
         <div className="Playgroud">
           <div style={{minHeight: height}} className="Playgroud-preview">
